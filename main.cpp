@@ -1,3 +1,5 @@
+// RUN ME: g++ main.cpp -o POV `pkg-config --cflags --libs opencv` && ./POV pics/Adam_Scott/Adam_Scott_0002.jpg
+
 #include "opencv2/objdetect/objdetect.hpp"
 #include "opencv2/highgui/highgui.hpp"
 #include "opencv2/imgproc/imgproc.hpp"
@@ -12,7 +14,7 @@ using namespace std;
 using namespace cv;
 
 vector<Mat> images; //storing loaded images of db
-vector<int> labels;  //storing labels of images
+vector<string> labels;  //storing labels of images
 String face_cascade_name = "haarcascade_frontalface_alt.xml";
 String right_eye_cascade_name = "haarcascade_righteye_2splits.xml";
 String left_eye_cascade_name = "haarcascade_lefteye_2splits.xml";
@@ -20,7 +22,7 @@ CascadeClassifier face_cascade;
 CascadeClassifier right_eye_cascade;
 CascadeClassifier left_eye_cascade;
 
-#define DEBUG 0
+#define DEBUG 1
 
 
 // face recognition
@@ -75,7 +77,7 @@ int detectFace( Mat frame )
     return 0;
 }
 
-static void read_csv(const string& filename, vector<Mat>& images, vector<int>& labels, char separator = ';') {
+static void read_csv(const string& filename, vector<Mat>& images, vector<string>& labels, char separator = ';') {
     ifstream file(filename.c_str(), ifstream::in);
     if (!file) {
         string error_message = "No valid input file was given, please check the given filename.";
@@ -88,7 +90,7 @@ static void read_csv(const string& filename, vector<Mat>& images, vector<int>& l
         getline(liness, classlabel);
         if(!path.empty() && !classlabel.empty()) {
             images.push_back(imread(path, CV_LOAD_IMAGE_COLOR));
-            labels.push_back(classlabel));
+            labels.push_back(classlabel);
         }
     }
 }
