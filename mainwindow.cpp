@@ -217,9 +217,12 @@ void MainWindow::on_button3_clicked()
 void MainWindow::on_button4_clicked()
 {
     // reset gui
+    this->train();
+    cerr << "Face recognized: " << this->recognize(this->leftImage) << endl;
+     /*
     this->init_gui();
     this->timer->stop();
-    this->camSource.release();
+    this->camSource.release(); */
 }
 
 void MainWindow::update_left_image()
@@ -282,6 +285,7 @@ void MainWindow::update_cam_left_image()
 
 void MainWindow::read_csv(const string &filename, vector<Mat>& images, vector<string>& labels, char separator)
 {
+	cerr << "READING CSV: " << filename << endl;
     ifstream file(filename.c_str(), ifstream::in);
     if (!file) {
         string error_message = "No valid input file was given, please check the given filename.";
@@ -293,11 +297,15 @@ void MainWindow::read_csv(const string &filename, vector<Mat>& images, vector<st
         getline(liness, path, separator);
         getline(liness, classlabel);
         if(!path.empty() && !classlabel.empty()) {
-            images.push_back(imread(path, CV_LOAD_IMAGE_COLOR));
-            this->show_message("Loading training image: "+path);
+			Mat m = imread(path, 1);
+			Mat m2;
+			cvtColor(m,m2,CV_BGR2GRAY);
+			images.push_back(m2);
             labels.push_back(classlabel);
         }
     }
+    this->images=images;
+    this->labels=labels;
 }
 
 // face recognition
@@ -355,4 +363,109 @@ int MainWindow::detectFace( Mat frame, Mat& out )
     return 0;
 }
 
+// Normalizes a given image into a value range between 0 and 255.
+Mat MainWindow::norm_0_255(const Mat& src) {
+    // Create and return normalized image:
+    Mat dst;
+    switch(src.channels()) {
+    case 1:
+        cv::normalize(src, dst, 0, 255, NORM_MINMAX, CV_8UC1);
+        break;
+    case 3:
+        cv::normalize(src, dst, 0, 255, NORM_MINMAX, CV_8UC3);
+        break;
+    default:
+        src.copyTo(dst);
+        break;
+    }
+    return dst;
+}
 
+void MainWindow::train()
+{
+	cerr << "TRAINING" << endl;
+	if (this->images.size() == 0)
+		return;
+	//		 number of samples	  dimensionality		  type
+	Mat matPCA(this->images.size(), this->images[0].total(), CV_32FC1);
+    
+    for(int i = 0; i < this->images.size(); i++) {
+        //skip unconvertable images
+        if(this->images.empty() || this->images[i].total() != this->images[0].total()) {
+			cerr << "Skipping " << this->labels[i] << endl;
+			continue;
+		}
+        // Make reshape happy by cloning for non-continuous matrices:
+        if(this->images[i].isContinuous()) {
+            this->images[i].reshape(1, 1).convertTo(matPCA.row(i), CV_32FC1, 1, 0);
+        } else {
+            this->images[i].clone().reshape(1, 1).convertTo(matPCA.row(i), CV_32FC1, 1, 0);
+        }
+        
+        this->projections.push_back(this->images[i]);
+    }
+	this->pca(matPCA, Mat(), CV_PCA_DATA_AS_ROW, matPCA.rows);
+	this->mean = this->pca.mean.reshape(1,1);
+	this->eugenVal = this->pca.eigenvalues.clone();
+	transpose(this->pca.eigenvectors, this->transposedEV);
+	
+	for(unsigned int i = 0; i< this->images.size(); i++){	
+			
+		this->projections[i] = subspaceProject(this->transposedEV, this->mean, matPCA.row(i));
+	}
+
+}
+
+String MainWindow::recognize(Mat frame) {
+	Mat image;
+	cvtColor(frame, image, CV_BGR2GRAY);
+	string name = "unknown";
+	int k=5;
+	if(this->labels.size() <= k) 
+		return "unknown";
+
+	//project target face to subspace
+	Mat target = subspaceProject(this->transposedEV, this->mean, image.reshape(1,1));
+
+	vector<unsigned int> classes(k,0);
+	vector<double> distances(k,DBL_MAX);
+	
+	double distance = DBL_MAX;
+	//find k nearest neighbours
+	for(int i = 0; i < this->images.size(); i++){
+		distance= norm(projections[i],target,NORM_L2);//norml2
+		for(int j = 0; j < k; j++){
+			if(distance < distances[j]){
+				//discard the worst match and shift remaining down 
+				for(int l = k-1; l > j; l--){
+					distances[l] = distances[l-1];
+					classes[l] = classes[l-1];
+				}
+				classes[j] = i; //set new best
+				distances[j] = distance;
+				break;
+			}
+		}
+	}
+
+	map<string,Weight> neighbours;
+	//count occurence of classes
+	for(unsigned int i = 0; i<k; i++){
+		Weight &weight = neighbours[this->labels[classes[i]]];
+		weight.count++;
+		weight.distance += distances[i];
+	}
+
+//evaluate voting
+	double min_weight = DBL_MAX;
+	for (map<string,Weight>::iterator itr = neighbours.begin(); itr != neighbours.end();++itr){
+		double weight = itr->second.distance / (double) itr->second.count;
+		//concider average weight instead of number of votes
+		if(weight < min_weight){
+			min_weight = weight;
+			name = itr->first;
+		} 
+	}
+
+	return name;
+}

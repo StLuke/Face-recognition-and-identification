@@ -8,6 +8,7 @@
 #include <opencv2/imgproc/imgproc.hpp>
 #include <opencv2/highgui/highgui.hpp>
 #include <opencv2/objdetect/objdetect.hpp>
+#include <opencv2/contrib/contrib.hpp>
 
 #include <fstream>
 #include <sstream>
@@ -23,6 +24,11 @@ using namespace std;
 namespace Ui {
 class MainWindow;
 }
+
+struct Weight{
+	unsigned int count;
+	double distance;
+};
 
 class MainWindow : public QMainWindow
 {
@@ -70,7 +76,7 @@ private:
     Ui::MainWindow *ui;
     QTimer *timer;
 
-    vector<Mat> images; //storing loaded images of db
+    vector<Mat> images, projections; //storing loaded images of db
     vector<string> labels;  //storing labels of images
     CascadeClassifier face_cascade;
     CascadeClassifier right_eye_cascade;
@@ -88,11 +94,17 @@ private:
 
     string inputPathFile; // path to input file
 
+	Mat mean, eugenVal, transposedEV;
+	PCA pca;
+
     void init_gui();
     void disable_gui();
     void load_input_image(const string &path);
     void read_csv(const string& filename, vector<Mat>& images, vector<string>& labels, char separator = ';');
     int detectFace(Mat frame, Mat &out);
+    void train(void);
+    Mat norm_0_255(const Mat&);
+    String recognize(Mat);
 };
 
 #endif // MAINWINDOW_H
