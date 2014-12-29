@@ -123,7 +123,7 @@
             <item>
              <widget class="QRadioButton" name="radioButtonCam">
               <property name="enabled">
-               <bool>false</bool>
+               <bool>true</bool>
               </property>
               <property name="text">
                <string>Cam</string>
@@ -156,6 +156,9 @@
             </item>
             <item>
              <widget class="QPushButton" name="button2">
+              <property name="enabled">
+               <bool>false</bool>
+              </property>
               <property name="text">
                <string>Recognize</string>
               </property>
@@ -163,8 +166,11 @@
             </item>
             <item>
              <widget class="QPushButton" name="button3">
+              <property name="enabled">
+               <bool>false</bool>
+              </property>
               <property name="text">
-               <string>Load CSV</string>
+               <string>Take a picture</string>
               </property>
              </widget>
             </item>
