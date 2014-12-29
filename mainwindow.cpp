@@ -128,7 +128,7 @@ void MainWindow::on_button2_clicked()
     this->load_input_image(this->inputPathFile);
     if(err=detectFace(this->leftImage))
     {
-        this->show_message("Wrong input data, unable to process: " + to_string(err));
+        this->show_message("Wrong input data, unable to process");
         return;
     }
     this->update_right_image();
