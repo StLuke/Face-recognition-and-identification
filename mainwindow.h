@@ -3,6 +3,7 @@
 
 #include <QMainWindow>
 #include <QFileDialog>
+#include <QTimer>
 #include <opencv2/core/core.hpp>
 #include <opencv2/imgproc/imgproc.hpp>
 #include <opencv2/highgui/highgui.hpp>
@@ -53,17 +54,21 @@ private slots:
 
     void on_button2_clicked();
 
+    void update_cam_left_image();
+
 private:
-    const string CSV_PATH = "pics.csv";
+    const string CSV_PATH = "pics2.csv";
     const string FACE_CASCADE_PATH = "haarcascade_frontalface_alt.xml";
     const string RIGHT_EYE_CASCADE_PATH = "haarcascade_righteye_2splits.xml";
     const string LEFT_EYE_CASCADE_PATH = "haarcascade_lefteye_2splits.xml";
+    const int CAM_DEV_ID = 0;
     const int IMG_WIDTH = 250;
     const int IMG_HEIGHT = 250;
     const int WIN_WIDTH = 100+IMG_WIDTH+IMG_WIDTH;
     const int WIN_HEIGHT = 240+IMG_HEIGHT;
 
     Ui::MainWindow *ui;
+    QTimer *timer;
 
     vector<Mat> images; //storing loaded images of db
     vector<string> labels;  //storing labels of images
@@ -71,21 +76,23 @@ private:
     CascadeClassifier right_eye_cascade;
     CascadeClassifier left_eye_cascade;
 
-    Size imgSize;
+    Size imgSize; // size of input image
 
-    QImage qrightImage;
-    QImage qleftImage;
+    QImage qrightImage; // original displayed input image
+    QImage qleftImage; // changed displayed image
 
-    Mat leftImage;
-    Mat rightImage;
+    Mat leftImage; // original input image
+    Mat rightImage; // changed image
 
-    string inputPathFile;
+    VideoCapture camSource; // camera device
+
+    string inputPathFile; // path to input file
 
     void init_gui();
     void disable_gui();
     void load_input_image(const string &path);
     void read_csv(const string& filename, vector<Mat>& images, vector<string>& labels, char separator = ';');
-    int detectFace(Mat frame);
+    int detectFace(Mat frame, Mat &out);
 };
 
 #endif // MAINWINDOW_H
