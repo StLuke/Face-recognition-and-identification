@@ -22,20 +22,6 @@ MainWindow::MainWindow(QWidget *parent) :
     this->timer = new QTimer(this);
     connect(timer, SIGNAL(timeout()), this, SLOT(update_cam_left_image()));
     this->timer->stop();
-
-    // load train samples
-    this->show_message("Start Load CSV file with train samples...");
-    try
-    {
-        read_csv(this->CSV_PATH, this->images, this->labels);
-    }
-    catch (Exception& e)
-    {
-        this->show_message("Error opening file \""+this->CSV_PATH+"\". Reason: " + e.msg);
-        this->disable_gui();
-        return;
-    }
-    this->show_message("CSV file with train samples loaded successfully");
 }
 
 MainWindow::~MainWindow()
@@ -45,7 +31,11 @@ MainWindow::~MainWindow()
 
 void MainWindow::show_message(const string &msg)
 {
+    this->update();
+    this->ui->textEdit->update();
     this->ui->textEdit->appendPlainText(QString::fromStdString(msg));
+    this->update();
+    this->ui->textEdit->update();
     return;
 }
 
@@ -73,8 +63,6 @@ void MainWindow::init_gui()
     this->ui->labelRight->setMinimumHeight(this->IMG_HEIGHT);
 
     //this->resize(this->WIN_WIDTH, this->WIN_HEIGHT);
-
-    this->ui->button1->setText("File...");
 }
 
 void MainWindow::disable_gui()
@@ -86,7 +74,6 @@ void MainWindow::disable_gui()
     this->ui->button4->setEnabled(false);
     this->ui->radioButtonCam->setEnabled(false);
     this->ui->radioButtonPhoto->setEnabled(false);
-    this->ui->radioButtonVideo->setEnabled(false);
 }
 
 void MainWindow::load_input_image(const string &path)
@@ -112,14 +99,6 @@ void MainWindow::on_radioButtonCam_clicked()
     this->ui->button1->setText("Start");
 }
 
-void MainWindow::on_radioButtonVideo_clicked()
-{ // video file
-    this->ui->button1->setText("File...");
-    this->ui->button3->setEnabled(false);
-    this->camSource.release();
-    this->timer->stop();
-}
-
 void MainWindow::on_radioButtonPhoto_clicked()
 { // photo file
     this->ui->button1->setText("File...");
@@ -128,9 +107,42 @@ void MainWindow::on_radioButtonPhoto_clicked()
     this->timer->stop();
 }
 
+void MainWindow::init_recognizer()
+{
+    // load train samples
+    this->show_message("Start Load CSV file with train samples...");
+    try
+    {
+        read_csv(this->CSV_PATH, this->images, this->labels);
+    }
+    catch (Exception& e)
+    {
+        this->show_message("Error opening file \""+this->CSV_PATH+"\". Reason: " + e.msg);
+        this->disable_gui();
+        return;
+    }
+    this->show_message("CSV file with train samples loaded successfully");
+
+    // train our model
+    this->show_message("Training...");
+    this->train();
+    this->show_message("Training done");
+}
+
 void MainWindow::on_button1_clicked()
 {
-    if(!this->ui->radioButtonCam->isChecked())
+    if(!this->ui->radioButtonPhoto->isEnabled())
+    {
+        // init recognizer
+        this->init_recognizer();
+
+        // set gui to enabled mode
+        this->ui->button1->setText("File...");
+        this->ui->radioButtonCam->setEnabled(true);
+        this->ui->radioButtonPhoto->setEnabled(true);
+        this->ui->button4->setEnabled(true);
+    }
+    else if(!this->ui->radioButtonCam->isChecked())
     { // photo or video file
         string oldPath = "";
         if(this->inputPathFile.length() > 0 && !this->inputPathFile.empty())
@@ -182,6 +194,7 @@ void MainWindow::on_button2_clicked()
     if(err)
         this->show_message("Warning: can not detect face/eye(s)");
     this->update_right_image();
+    this->show_message("Face recognized: " + this->recognize(this->leftImage));
 }
 
 
@@ -217,12 +230,9 @@ void MainWindow::on_button3_clicked()
 void MainWindow::on_button4_clicked()
 {
     // reset gui
-    this->train();
-    cerr << "Face recognized: " << this->recognize(this->leftImage) << endl;
-     /*
     this->init_gui();
     this->timer->stop();
-    this->camSource.release(); */
+    this->camSource.release();
 }
 
 void MainWindow::update_left_image()
@@ -285,7 +295,6 @@ void MainWindow::update_cam_left_image()
 
 void MainWindow::read_csv(const string &filename, vector<Mat>& images, vector<string>& labels, char separator)
 {
-	cerr << "READING CSV: " << filename << endl;
     ifstream file(filename.c_str(), ifstream::in);
     if (!file) {
         string error_message = "No valid input file was given, please check the given filename.";
@@ -297,10 +306,13 @@ void MainWindow::read_csv(const string &filename, vector<Mat>& images, vector<st
         getline(liness, path, separator);
         getline(liness, classlabel);
         if(!path.empty() && !classlabel.empty()) {
-			Mat m = imread(path, 1);
-			Mat m2;
-			cvtColor(m,m2,CV_BGR2GRAY);
-			images.push_back(m2);
+            Mat m = imread(path, 1);
+            Mat m2;
+            if(m.empty())
+                continue;
+            this->show_message("Loading training image: "+path);
+            cvtColor(m,m2,CV_BGR2GRAY);
+            images.push_back(m2);
             labels.push_back(classlabel);
         }
     }
@@ -364,108 +376,119 @@ int MainWindow::detectFace( Mat frame, Mat& out )
 }
 
 // Normalizes a given image into a value range between 0 and 255.
-Mat MainWindow::norm_0_255(const Mat& src) {
+Mat MainWindow::norm_0_255(const Mat& src)
+{
     // Create and return normalized image:
     Mat dst;
-    switch(src.channels()) {
-    case 1:
-        cv::normalize(src, dst, 0, 255, NORM_MINMAX, CV_8UC1);
-        break;
-    case 3:
-        cv::normalize(src, dst, 0, 255, NORM_MINMAX, CV_8UC3);
-        break;
-    default:
-        src.copyTo(dst);
-        break;
+    switch(src.channels())
+    {
+        case 1:
+            cv::normalize(src, dst, 0, 255, NORM_MINMAX, CV_8UC1);
+            break;
+        case 3:
+            cv::normalize(src, dst, 0, 255, NORM_MINMAX, CV_8UC3);
+            break;
+        default:
+            src.copyTo(dst);
+            break;
     }
     return dst;
 }
 
 void MainWindow::train()
 {
-	cerr << "TRAINING" << endl;
-	if (this->images.size() == 0)
-		return;
-	//		 number of samples	  dimensionality		  type
-	Mat matPCA(this->images.size(), this->images[0].total(), CV_32FC1);
-    
-    for(int i = 0; i < this->images.size(); i++) {
-        //skip unconvertable images
-        if(this->images.empty() || this->images[i].total() != this->images[0].total()) {
-			cerr << "Skipping " << this->labels[i] << endl;
-			continue;
-		}
-        // Make reshape happy by cloning for non-continuous matrices:
-        if(this->images[i].isContinuous()) {
+    if (this->images.size() == 0)
+        return;
+    //          number of samples	  dimensionality		  type
+    Mat matPCA(this->images.size(), this->images[0].total(), CV_32FC1);
+
+    for(unsigned int i = 0; i < this->images.size(); i++)
+    {
+        if(this->images.empty() || this->images[i].total() != this->images[0].total())
+        { //skip unconvertable images
+            this->show_message("Skipping uncovertable image: " + this->labels[i]);
+            continue;
+        }
+        if(this->images[i].isContinuous())
+        { // Make reshape happy by cloning for non-continuous matrices:
             this->images[i].reshape(1, 1).convertTo(matPCA.row(i), CV_32FC1, 1, 0);
-        } else {
+        }
+        else
+        {
             this->images[i].clone().reshape(1, 1).convertTo(matPCA.row(i), CV_32FC1, 1, 0);
         }
-        
         this->projections.push_back(this->images[i]);
     }
-	this->pca(matPCA, Mat(), CV_PCA_DATA_AS_ROW, matPCA.rows);
-	this->mean = this->pca.mean.reshape(1,1);
-	this->eugenVal = this->pca.eigenvalues.clone();
-	transpose(this->pca.eigenvectors, this->transposedEV);
-	
-	for(unsigned int i = 0; i< this->images.size(); i++){	
-			
-		this->projections[i] = subspaceProject(this->transposedEV, this->mean, matPCA.row(i));
-	}
+    this->pca(matPCA, Mat(), CV_PCA_DATA_AS_ROW, matPCA.rows);
+    this->mean = this->pca.mean.reshape(1,1);
+    this->eugenVal = this->pca.eigenvalues.clone();
+    transpose(this->pca.eigenvectors, this->transposedEV);
 
+    for(unsigned int i = 0; i< this->images.size(); i++)
+    {
+
+        this->projections[i] = subspaceProject(this->transposedEV, this->mean, matPCA.row(i));
+    }
+
+    return;
 }
 
-String MainWindow::recognize(Mat frame) {
-	Mat image;
-	cvtColor(frame, image, CV_BGR2GRAY);
-	string name = "unknown";
-	int k=5;
-	if(this->labels.size() <= k) 
-		return "unknown";
+String MainWindow::recognize(Mat frame)
+{
+    Mat image;
+    cvtColor(frame, image, CV_BGR2GRAY);
+    string name = "unknown";
+    unsigned int k=5;
+    if(this->labels.size() <= k)
+        return "unknown";
 
-	//project target face to subspace
-	Mat target = subspaceProject(this->transposedEV, this->mean, image.reshape(1,1));
+    //project target face to subspace
+    Mat target = subspaceProject(this->transposedEV, this->mean, image.reshape(1,1));
 
-	vector<unsigned int> classes(k,0);
-	vector<double> distances(k,DBL_MAX);
-	
-	double distance = DBL_MAX;
-	//find k nearest neighbours
-	for(int i = 0; i < this->images.size(); i++){
-		distance= norm(projections[i],target,NORM_L2);//norml2
-		for(int j = 0; j < k; j++){
-			if(distance < distances[j]){
-				//discard the worst match and shift remaining down 
-				for(int l = k-1; l > j; l--){
-					distances[l] = distances[l-1];
-					classes[l] = classes[l-1];
-				}
-				classes[j] = i; //set new best
-				distances[j] = distance;
-				break;
-			}
-		}
-	}
+    vector<unsigned int> classes(k,0);
+    vector<double> distances(k,DBL_MAX);
 
-	map<string,Weight> neighbours;
-	//count occurence of classes
-	for(unsigned int i = 0; i<k; i++){
-		Weight &weight = neighbours[this->labels[classes[i]]];
-		weight.count++;
-		weight.distance += distances[i];
-	}
+    double distance = DBL_MAX;
+    //find k nearest neighbours
+    for(unsigned int i = 0; i < this->images.size(); i++)
+    {
+        distance= norm(projections[i],target,NORM_L2);//norml2
+        for(unsigned int j = 0; j < k; j++)
+        {
+            if(distance < distances[j])
+            { //discard the worst match and shift remaining down
+                for(unsigned int l = k-1; l > j; l--)
+                {
+                    distances[l] = distances[l-1];
+                    classes[l] = classes[l-1];
+                }
+                classes[j] = i; //set new best
+                distances[j] = distance;
+                break;
+            }
+        }
+    }
 
-//evaluate voting
-	double min_weight = DBL_MAX;
-	for (map<string,Weight>::iterator itr = neighbours.begin(); itr != neighbours.end();++itr){
-		double weight = itr->second.distance / (double) itr->second.count;
-		//concider average weight instead of number of votes
-		if(weight < min_weight){
-			min_weight = weight;
-			name = itr->first;
-		} 
-	}
+    map<string,Weight> neighbours;
+    //count occurence of classes
+    for(unsigned int i = 0; i < k; i++)
+    {
+        Weight &weight = neighbours[this->labels[classes[i]]];
+        weight.count++;
+        weight.distance += distances[i];
+    }
 
-	return name;
+    //evaluate voting
+    double min_weight = DBL_MAX;
+    for (map<string,Weight>::iterator itr = neighbours.begin(); itr != neighbours.end();++itr)
+    {
+        double weight = itr->second.distance / (double) itr->second.count;
+        if(weight < min_weight)
+        { //concider average weight instead of number of votes
+            min_weight = weight;
+            name = itr->first;
+        }
+    }
+
+    return name;
 }

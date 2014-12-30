@@ -96,6 +96,9 @@
            <layout class="QVBoxLayout" name="verticalLayout">
             <item>
              <widget class="QRadioButton" name="radioButtonPhoto">
+              <property name="enabled">
+               <bool>false</bool>
+              </property>
               <property name="text">
                <string>Photo</string>
               </property>
@@ -105,25 +108,9 @@
              </widget>
             </item>
             <item>
-             <widget class="QRadioButton" name="radioButtonVideo">
-              <property name="enabled">
-               <bool>false</bool>
-              </property>
-              <property name="text">
-               <string>Video</string>
-              </property>
-              <property name="checkable">
-               <bool>true</bool>
-              </property>
-              <property name="checked">
-               <bool>false</bool>
-              </property>
-             </widget>
-            </item>
-            <item>
              <widget class="QRadioButton" name="radioButtonCam">
               <property name="enabled">
-               <bool>true</bool>
+               <bool>false</bool>
               </property>
               <property name="text">
                <string>Cam</string>
@@ -150,7 +137,7 @@
             <item>
              <widget class="QPushButton" name="button1">
               <property name="text">
-               <string>File...</string>
+               <string>Init</string>
               </property>
              </widget>
             </item>
@@ -176,6 +163,9 @@
             </item>
             <item>
              <widget class="QPushButton" name="button4">
+              <property name="enabled">
+               <bool>false</bool>
+              </property>
               <property name="text">
                <string>Reset</string>
               </property>
