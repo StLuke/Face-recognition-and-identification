@@ -502,13 +502,10 @@ String MainWindow::recognize(Mat frame)
     vector<double> distances(k,DBL_MAX);
 
     double distance = DBL_MAX;
-<<<<<<< HEAD
+
     //find k nearest neighbours
     for(unsigned int i = 0; i < this->projections.size(); i++)
-=======
     //find KNN for k = 5
-    for(unsigned int i = 0; i < this->images.size(); i++)
->>>>>>> origin/master
     {
         distance= norm(projections[i],target,NORM_L2);//norml2
         for(unsigned int j = 0; j < k; j++)
