@@ -415,20 +415,21 @@ String MainWindow::recognize(Mat frame)
     vector<double> distances(k,DBL_MAX);
 
     double distance = DBL_MAX;
-    //find k nearest neighbours
+    //find KNN for k = 5
     for(unsigned int i = 0; i < this->images.size(); i++)
     {
         distance= norm(projections[i],target,NORM_L2);//norml2
         for(unsigned int j = 0; j < k; j++)
         {
             if(distance < distances[j])
-            { //discard the worst match and shift remaining down
+            {
+				//discard the worst match and shift remaining down
                 for(unsigned int l = k-1; l > j; l--)
                 {
                     distances[l] = distances[l-1];
                     classes[l] = classes[l-1];
                 }
-                classes[j] = i; //set new best
+                classes[j] = i;
                 distances[j] = distance;
                 break;
             }
@@ -444,13 +445,13 @@ String MainWindow::recognize(Mat frame)
         weight.distance += distances[i];
     }
 
-    //evaluate voting
+    //vote for the best match
     double min_weight = DBL_MAX;
     for (map<string,Weight>::iterator itr = neighbours.begin(); itr != neighbours.end();++itr)
     {
         double weight = itr->second.distance / (double) itr->second.count;
         if(weight < min_weight)
-        { //concider average weight instead of number of votes
+        {
             min_weight = weight;
             name = itr->first;
         }
