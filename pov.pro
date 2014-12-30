@@ -14,9 +14,11 @@ TEMPLATE = app
 CONFIG += c++11
 
 SOURCES += main.cpp\
-        mainwindow.cpp
+        mainwindow.cpp \
+    preprocessimg.cpp
 
-HEADERS  += mainwindow.h
+HEADERS  += mainwindow.h \
+    preprocessimg.h
 
 FORMS    += mainwindow.ui
 

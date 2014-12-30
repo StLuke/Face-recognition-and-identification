@@ -15,7 +15,7 @@ MainWindow::MainWindow(QWidget *parent) :
         !this->right_eye_cascade.load(this->RIGHT_EYE_CASCADE_PATH) ||
         !this->left_eye_cascade.load(this->LEFT_EYE_CASCADE_PATH))
     {
-        this->show_message("Error: loading cascade files\n");
+        this->show_message("Error: loading cascade files\n", true);
         this->disable_gui();
     }
 
@@ -29,13 +29,11 @@ MainWindow::~MainWindow()
     delete ui;
 }
 
-void MainWindow::show_message(const string &msg)
+void MainWindow::show_message(const string &msg, bool console_out)
 {
-    this->update();
-    this->ui->textEdit->update();
     this->ui->textEdit->appendPlainText(QString::fromStdString(msg));
-    this->update();
-    this->ui->textEdit->update();
+    if(console_out)
+        cerr << msg << endl;
     return;
 }
 
@@ -78,18 +76,17 @@ void MainWindow::disable_gui()
 
 void MainWindow::load_input_image(const string &path)
 {
-    this->show_message("Load file: "+path);
+    this->show_message("Load file: "+path, false);
     this->leftImage = imread(path, CV_LOAD_IMAGE_COLOR);
     if(this->leftImage.empty())
     {
-        this->show_message("Error: Cannot load file: "+path);
+        this->show_message("Error: Cannot load file: "+path, false);
         this->ui->button2->setEnabled(false);
         this->ui->labelLeft->clear();
         this->ui->labelRight->clear();
         return;
     }
 
-    //cv::resize(this->leftImage, this->leftImage, this->imgSize,0, 0, cv::INTER_NEAREST);
     this->ui->button2->setEnabled(true);
     this->update_left_image();
 }
@@ -110,23 +107,23 @@ void MainWindow::on_radioButtonPhoto_clicked()
 void MainWindow::init_recognizer()
 {
     // load train samples
-    this->show_message("Start Load CSV file with train samples...");
+    this->show_message("Start Load CSV file with train samples...", true);
     try
     {
         read_csv(this->CSV_PATH, this->images, this->labels);
     }
     catch (Exception& e)
     {
-        this->show_message("Error opening file \""+this->CSV_PATH+"\". Reason: " + e.msg);
+        this->show_message("Error opening file \""+this->CSV_PATH+"\". Reason: " + e.msg, true);
         this->disable_gui();
         return;
     }
-    this->show_message("CSV file with train samples loaded successfully");
+    this->show_message("CSV file with train samples loaded successfully", true);
 
     // train our model
-    this->show_message("Training...");
+    this->show_message("Training...", true);
     this->train();
-    this->show_message("Training done");
+    this->show_message("Training done", true);
 }
 
 void MainWindow::on_button1_clicked()
@@ -189,12 +186,15 @@ void MainWindow::on_button1_clicked()
 
 void MainWindow::on_button2_clicked()
 {
-    int err = 0;
-    err=detectFace(this->leftImage, this->rightImage);
-    if(err)
-        this->show_message("Warning: can not detect face/eye(s)");
-    this->update_right_image();
-    this->show_message("Face recognized: " + this->recognize(this->leftImage));
+    PreprocessImg img(this->leftImage);
+    if(!img.preprocess())
+    {
+        img.imgPreprocessedFace.copyTo(this->rightImage);
+
+        this->update_right_image();
+    }
+
+    this->show_message("Face recognized: " + this->recognize(this->rightImage), false);
 }
 
 
@@ -218,7 +218,7 @@ void MainWindow::on_button3_clicked()
 
     if(this->leftImage.empty())
     {
-        this->show_message("Error: Cannot load input image");
+        this->show_message("Error: Cannot load input image", false);
         this->ui->button2->setEnabled(false);
         return;
     }
@@ -242,7 +242,12 @@ void MainWindow::update_left_image()
         return;
     this->ui->labelLeft->clear();
 
-    cvtColor(this->leftImage, image, CV_BGR2RGB);
+    if(this->leftImage.channels() == 3)
+        cvtColor(this->leftImage, image, CV_BGR2RGB);
+    if(this->leftImage.channels() == 4)
+        cvtColor(this->leftImage, image, CV_BGRA2RGB);
+    if(this->leftImage.channels() == 1)
+        cvtColor(this->leftImage, image, CV_GRAY2RGB);
     this->qleftImage = QImage((uchar *)image.data, image.cols, image.rows, image.step, QImage::Format_RGB888);
     this->ui->labelLeft->setPixmap(QPixmap::fromImage(this->qleftImage));
 
@@ -258,7 +263,13 @@ void MainWindow::update_right_image()
         return;
     this->ui->labelRight->clear();
 
-    cvtColor(this->rightImage, image, CV_BGR2RGB);
+    if(this->rightImage.channels() == 3)
+        cvtColor(this->rightImage, image, CV_BGR2RGB);
+    if(this->rightImage.channels() == 4)
+        cvtColor(this->rightImage, image, CV_BGRA2RGB);
+    if(this->rightImage.channels() == 1)
+        cvtColor(this->rightImage, image, CV_GRAY2RGB);
+    cv::resize(image, image, Size(this->leftImage.rows, this->leftImage.rows));
     this->qrightImage = QImage((uchar *)image.data, image.cols, image.rows, image.step, QImage::Format_RGB888);
     this->ui->labelRight->setPixmap(QPixmap::fromImage(this->qrightImage));
 
@@ -281,10 +292,14 @@ void MainWindow::update_cam_left_image()
     this->camSource >> this->leftImage;
     this->update_left_image();
 
-    // detect face from input and show it on the right image
-    int err = detectFace(image, this->rightImage);
-    if(!err)
+    // Preprocess online image and show it on the right image
+    PreprocessImg img(this->leftImage);
+    if(!img.preprocess())
+    {
+        img.imgPreprocessedFace.copyTo(this->rightImage);
         this->update_right_image();
+    }
+    this->show_message("Face recognized: " + this->recognize(this->rightImage), false);
 
     this->ui->labelLeft->setMinimumWidth(this->qleftImage.width());
     this->ui->labelLeft->setMinimumHeight(this->qleftImage.height());
@@ -307,12 +322,12 @@ void MainWindow::read_csv(const string &filename, vector<Mat>& images, vector<st
         getline(liness, classlabel);
         if(!path.empty() && !classlabel.empty()) {
             Mat m = imread(path, 1);
-            Mat m2;
             if(m.empty())
                 continue;
-            this->show_message("Loading training image: "+path);
-            cvtColor(m,m2,CV_BGR2GRAY);
-            images.push_back(m2);
+            this->show_message("Loading and preprocessing training image: " + path, true);
+            PreprocessImg img = PreprocessImg(m);
+            img.preprocess();
+            images.push_back(img.imgPreprocessedFace);
             labels.push_back(classlabel);
         }
     }
@@ -320,60 +335,6 @@ void MainWindow::read_csv(const string &filename, vector<Mat>& images, vector<st
     this->labels=labels;
 }
 
-// face recognition
-int MainWindow::detectFace( Mat frame, Mat& out )
-{
-    std::vector<Rect> faces;
-    Mat frame_gray;
-
-    frame.copyTo(out);
-    cvtColor( frame, frame_gray, COLOR_BGR2GRAY );
-    equalizeHist( frame_gray, frame_gray );
-
-    //-- Detect faces
-    this->face_cascade.detectMultiScale( frame_gray, faces, 1.1, 2, 0|CV_HAAR_SCALE_IMAGE|CV_HAAR_FIND_BIGGEST_OBJECT, Size(30, 30) );
-    if (faces.size() == 0 || faces.size() > 1)
-    {
-        //this->show_message("Error: Cannot find face");
-        return 1;
-    }
-    for( size_t i = 0; i < faces.size(); i++ )
-    {
-
-        Point center( faces[i].x + faces[i].width*0.5, faces[i].y + faces[i].height*0.5 );
-        ellipse( out, center, Size( faces[i].width*0.5, faces[i].height*0.5), 0, 0, 360, Scalar( 255, 0, 255 ), 4, 8, 0 );
-
-        Mat faceROI = frame_gray( faces[i] );
-        std::vector<Rect> leyes;
-        std::vector<Rect> reyes;
-
-        //-- In each face, detect eyes
-        this->left_eye_cascade.detectMultiScale( faceROI, leyes, 1.1, 2, 0 |CV_HAAR_SCALE_IMAGE|CV_HAAR_FIND_BIGGEST_OBJECT, Size(30, 30) );
-        this->right_eye_cascade.detectMultiScale( faceROI, reyes, 1.1, 2, 0 |CV_HAAR_SCALE_IMAGE|CV_HAAR_FIND_BIGGEST_OBJECT, Size(30,30) );
-        if (leyes.size() < 1 || reyes.size() < 1)
-        {
-            //this->show_message("Error: Cannot find left or right eye");
-            return 2;
-        }
-
-        for( size_t j = 0; j < leyes.size(); j++ )
-        {
-            Point center( faces[i].x + leyes[j].x + leyes[j].width*0.5, faces[i].y + leyes[j].y + leyes[j].height*0.5 );
-            int radius = cvRound( (leyes[j].width + leyes[j].height)*0.25 );
-            circle( out, center, radius, Scalar( 255, 0, 0 ), 4, 8, 0 );
-        }
-
-        for( size_t j = 0; j < reyes.size(); j++ )
-        {
-            Point center( faces[i].x + reyes[j].x + reyes[j].width*0.5, faces[i].y + reyes[j].y + reyes[j].height*0.5 );
-            int radius = cvRound( (reyes[j].width + reyes[j].height)*0.25 );
-            circle( out, center, radius, Scalar( 0, 255, 0 ), 4, 8, 0 );
-        }
-
-    }
-
-    return 0;
-}
 
 // Normalizes a given image into a value range between 0 and 255.
 Mat MainWindow::norm_0_255(const Mat& src)
@@ -406,7 +367,7 @@ void MainWindow::train()
     {
         if(this->images.empty() || this->images[i].total() != this->images[0].total())
         { //skip unconvertable images
-            this->show_message("Skipping uncovertable image: " + this->labels[i]);
+            this->show_message("Skipping uncovertable image: " + this->labels[i], true);
             continue;
         }
         if(this->images[i].isContinuous())
@@ -436,7 +397,12 @@ void MainWindow::train()
 String MainWindow::recognize(Mat frame)
 {
     Mat image;
-    cvtColor(frame, image, CV_BGR2GRAY);
+    if(frame.channels() == 3)
+        cvtColor(frame,image, CV_BGR2GRAY);
+    else if(frame.channels() == 4)
+        cvtColor(frame,image, CV_BGRA2GRAY);
+    else if(frame.channels() == 1)
+        frame.copyTo(image);
     string name = "unknown";
     unsigned int k=5;
     if(this->labels.size() <= k)
@@ -489,6 +455,8 @@ String MainWindow::recognize(Mat frame)
             name = itr->first;
         }
     }
+
+    this->show_message("with weight: "+to_string(min_weight), false);
 
     return name;
 }

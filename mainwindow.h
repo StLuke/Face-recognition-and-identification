@@ -16,6 +16,8 @@
 #include <stdio.h>
 #include <vector>
 
+#include "preprocessimg.h"
+
 using namespace cv;
 using namespace std;
 
@@ -52,7 +54,7 @@ public:
     /**
      *
      */
-    void show_message(const string& msg);
+    void show_message(const string& msg, bool console_out);
 
 private slots:
     /**
@@ -149,10 +151,6 @@ private:
      *
      */
     void read_csv(const string& filename, vector<Mat>& images, vector<string>& labels, char separator = ';');
-    /**
-     *
-     */
-    int detectFace(Mat frame, Mat &out);
     /**
      *
      */
