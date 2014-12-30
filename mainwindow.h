@@ -97,6 +97,10 @@ private slots:
      *
      */
     void update_cam_left_image();
+    /**
+     *
+     */
+    void on_button5_clicked();
 
 private:
     const string CSV_PATH = "pics2.csv"; /** */
@@ -112,8 +116,10 @@ private:
     Ui::MainWindow *ui; /** */
     QTimer *timer; /** */
 
-    vector<Mat> images, projections;  /** *///storing loaded images of db
+    vector<Mat> images; /** *///storing loaded images of db
+    vector<Mat >projections;  /** *///storing loaded images of db
     vector<string> labels;   /** *///storing labels of images
+    vector<int> groups; /** storing info about number of testing group for images*/
     CascadeClassifier face_cascade; /** */
     CascadeClassifier right_eye_cascade; /** */
     CascadeClassifier left_eye_cascade; /** */
@@ -158,7 +164,7 @@ private:
     /**
      *
      */
-    void train();
+    void train(vector<Mat> &images, vector<string> &labels, int testGroup);
     /**
      *
      */

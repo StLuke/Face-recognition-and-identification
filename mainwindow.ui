@@ -6,8 +6,8 @@
    <rect>
     <x>0</x>
     <y>0</y>
-    <width>638</width>
-    <height>437</height>
+    <width>639</width>
+    <height>467</height>
    </rect>
   </property>
   <property name="minimumSize">
@@ -49,8 +49,8 @@
         <rect>
          <x>0</x>
          <y>0</y>
-         <width>638</width>
-         <height>396</height>
+         <width>639</width>
+         <height>426</height>
         </rect>
        </property>
        <layout class="QGridLayout" name="gridLayout_2">
@@ -172,6 +172,13 @@
              </widget>
             </item>
             <item>
+             <widget class="QPushButton" name="button5">
+              <property name="text">
+               <string>Test</string>
+              </property>
+             </widget>
+            </item>
+            <item>
              <spacer name="verticalSpacer_2">
               <property name="orientation">
                <enum>Qt::Vertical</enum>
@@ -206,7 +213,7 @@
     <rect>
      <x>0</x>
      <y>0</y>
-     <width>638</width>
+     <width>639</width>
      <height>21</height>
     </rect>
    </property>

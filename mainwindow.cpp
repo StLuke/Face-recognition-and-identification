@@ -120,9 +120,16 @@ void MainWindow::init_recognizer()
     }
     this->show_message("CSV file with train samples loaded successfully", true);
 
+    // init structures for training
+    this->projections.clear();
+    this->transposedEV = Mat();
+    this->eugenVal = Mat();
+    this->mean = Mat();
+    this->pca = PCA();
+
     // train our model
     this->show_message("Training...", true);
-    this->train();
+    this->train(this->images, this->labels, -1);
     this->show_message("Training done", true);
 }
 
@@ -189,12 +196,12 @@ void MainWindow::on_button2_clicked()
     PreprocessImg img(this->leftImage);
     if(!img.preprocess())
     {
-        img.imgPreprocessedFace.copyTo(this->rightImage);
+        img.imgCropedFace.copyTo(this->rightImage);
 
         this->update_right_image();
     }
 
-    this->show_message("Face recognized: " + this->recognize(this->rightImage), false);
+    this->show_message("Face recognized: " + this->recognize(img.imgPreprocessedFace), false);
 }
 
 
@@ -233,6 +240,79 @@ void MainWindow::on_button4_clicked()
     this->init_gui();
     this->timer->stop();
     this->camSource.release();
+}
+
+
+void MainWindow::on_button5_clicked()
+{
+    if(this->images.empty() || this->labels.empty())
+    { // in case no images and labels are loaded
+        this->show_message("Start Load CSV file with train samples...", true);
+        try
+        {
+            read_csv(this->CSV_PATH, this->images, this->labels);
+        }
+        catch (Exception& e)
+        {
+            this->show_message("Error opening file \""+this->CSV_PATH+"\". Reason: " + e.msg, true);
+            this->disable_gui();
+            return;
+        }
+        this->show_message("CSV file with train samples loaded successfully", true);
+    }
+
+    // set images to groups, sequentially
+    int groupsNum = 10;
+    unsigned int groupSize = ceil(this->images.size()/(double)groupsNum);
+    this->groups.clear();
+    int currentGroup = 0;
+    for(unsigned int i = 0, j = 0; i < this->images.size(); i++, j++)
+    {
+        if(j >= groupSize)
+        {
+            currentGroup++;
+            j = 0;
+        }
+        this->groups.push_back(currentGroup);
+    }
+    // now randomly
+    random_shuffle ( this->groups.begin(), this->groups.end() );
+
+    int err = 0;
+    int testNum = 0;
+
+    for(int j = 0; j < groupsNum; j++)
+    {
+        // init structures for training
+        this->projections.clear();
+        this->transposedEV = Mat();
+        this->eugenVal = Mat();
+        this->mean = Mat();
+        this->pca = PCA();
+        this->show_message("Training for test "+to_string(j)+"...", true);
+        this->train(this->images, this->labels, j);
+        this->show_message("Training for test "+to_string(j)+" done", true);
+
+        int actErr = 0;
+        int actTestNum = 0;
+
+        for(unsigned int i = 0; i < this->images.size(); i++)
+        {
+            if(this->groups[i] != j)
+                continue;
+            actTestNum++;
+            if(this->labels[i].compare(this->recognize(this->images[i])) != 0)
+                actErr++;
+        }
+
+        err += actErr;
+        testNum += actTestNum;
+
+        this->show_message("Test "+to_string(j)+" done... success in "+to_string(actTestNum-actErr)+"/"+to_string(actTestNum), true);
+    }
+
+    this->show_message("Cross-validation done... success in "+to_string(testNum-err)+"/"+to_string(testNum)+" => "+to_string((testNum-err)/(double)testNum)+"%", true);
+
 }
 
 void MainWindow::update_left_image()
@@ -296,10 +376,10 @@ void MainWindow::update_cam_left_image()
     PreprocessImg img(this->leftImage);
     if(!img.preprocess())
     {
-        img.imgPreprocessedFace.copyTo(this->rightImage);
+        img.imgCropedFace.copyTo(this->rightImage);
         this->update_right_image();
     }
-    this->show_message("Face recognized: " + this->recognize(this->rightImage), false);
+    this->show_message("Face recognized: " + this->recognize(img.imgPreprocessedFace), false);
 
     this->ui->labelLeft->setMinimumWidth(this->qleftImage.width());
     this->ui->labelLeft->setMinimumHeight(this->qleftImage.height());
@@ -356,38 +436,45 @@ Mat MainWindow::norm_0_255(const Mat& src)
     return dst;
 }
 
-void MainWindow::train()
+void MainWindow::train(vector<Mat> &images, vector<string> &labels, int testGroup)
 {
-    if (this->images.size() == 0)
+    if (images.size() == 0)
         return;
     //          number of samples	  dimensionality		  type
-    Mat matPCA(this->images.size(), this->images[0].total(), CV_32FC1);
+    Mat matPCA(images.size(), images[0].total(), CV_32FC1);
 
-    for(unsigned int i = 0; i < this->images.size(); i++)
+    for(unsigned int i = 0; i < images.size(); i++)
     {
-        if(this->images.empty() || this->images[i].total() != this->images[0].total())
+        if(testGroup != -1 && i < this->groups.size())
+        {
+            if(this->groups[i] == testGroup)
+            {
+                //this->show_message("Skipping testing image: " + labels[i], true);
+                continue;
+            }
+        }
+        if(images.empty() || images[i].total() != images[0].total())
         { //skip unconvertable images
-            this->show_message("Skipping uncovertable image: " + this->labels[i], true);
+            this->show_message("Skipping uncovertable image: " + labels[i], true);
             continue;
         }
-        if(this->images[i].isContinuous())
+        if(images[i].isContinuous())
         { // Make reshape happy by cloning for non-continuous matrices:
-            this->images[i].reshape(1, 1).convertTo(matPCA.row(i), CV_32FC1, 1, 0);
+            images[i].reshape(1, 1).convertTo(matPCA.row(i), CV_32FC1, 1, 0);
         }
         else
         {
-            this->images[i].clone().reshape(1, 1).convertTo(matPCA.row(i), CV_32FC1, 1, 0);
+            images[i].clone().reshape(1, 1).convertTo(matPCA.row(i), CV_32FC1, 1, 0);
         }
-        this->projections.push_back(this->images[i]);
+        this->projections.push_back(images[i]);
     }
     this->pca(matPCA, Mat(), CV_PCA_DATA_AS_ROW, matPCA.rows);
     this->mean = this->pca.mean.reshape(1,1);
     this->eugenVal = this->pca.eigenvalues.clone();
     transpose(this->pca.eigenvectors, this->transposedEV);
 
-    for(unsigned int i = 0; i< this->images.size(); i++)
+    for(unsigned int i = 0; i< this->projections.size(); i++)
     {
-
         this->projections[i] = subspaceProject(this->transposedEV, this->mean, matPCA.row(i));
     }
 
@@ -416,7 +503,7 @@ String MainWindow::recognize(Mat frame)
 
     double distance = DBL_MAX;
     //find k nearest neighbours
-    for(unsigned int i = 0; i < this->images.size(); i++)
+    for(unsigned int i = 0; i < this->projections.size(); i++)
     {
         distance= norm(projections[i],target,NORM_L2);//norml2
         for(unsigned int j = 0; j < k; j++)
@@ -456,7 +543,6 @@ String MainWindow::recognize(Mat frame)
         }
     }
 
-    this->show_message("with weight: "+to_string(min_weight), false);
-
     return name;
 }
+

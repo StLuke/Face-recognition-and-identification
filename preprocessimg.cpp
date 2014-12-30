@@ -26,22 +26,24 @@ int PreprocessImg::preprocess()
 
     Point leftEye, rightEye;
     this->detectEyes(this->imgFace, leftEye, rightEye);
-    this->rotateFace(this->imgFace, this->imgRotatedFace, leftEye, rightEye);
+    //this->rotateFace(this->imgFace, this->imgRotatedFace, leftEye, rightEye);
+    //this->equalize(this->imgRotatedFace, this->imgPreprocessedFace, true);
 
-    this->equalize(this->imgRotatedFace, this->imgPreprocessedFace, true);
+    this->equalize(this->imgFace, this->imgPreprocessedFace, true);
 
     Mat filtered = Mat(this->imgPreprocessedFace.size(), CV_8U);
-    bilateralFilter(this->imgPreprocessedFace, filtered, 0, 20.0, 2.0);
+    //bilateralFilter(this->imgPreprocessedFace, filtered, 0, 20.0, 2.0);
+    this->imgPreprocessedFace.copyTo(filtered);
     Mat mask = Mat(this->imgPreprocessedFace.size(), CV_8U, Scalar(0));
     Point faceCenter = Point( this->imgPreprocessedFace.cols/2, cvRound(this->imgPreprocessedFace.rows * 0.5));
     Size size = Size( cvRound(this->imgPreprocessedFace.cols * 0.4), cvRound(this->imgPreprocessedFace.rows * 0.8) );
     ellipse(mask, faceCenter, size, 0, 0, 360, Scalar(255), CV_FILLED);
+    // set default gray
+    Mat dstImg = Mat(this->imgPreprocessedFace.size(), CV_8U, Scalar(128));
+    // copy with mask
+    filtered.copyTo(dstImg, mask);
 
-    Mat dstImg = Mat(this->imgPreprocessedFace.size(), CV_8U, Scalar(128)); // Clear the output image to a default gray.
-
-    filtered.copyTo(dstImg, mask); // Copies non-masked pixels from filtered to dstImg.
-
-    dstImg.copyTo(this->imgPreprocessedFace);
+    dstImg.copyTo(this->imgCropedFace);
     return 0;
 }
 
@@ -175,7 +177,7 @@ int PreprocessImg::rotateFace(const Mat &face, Mat &out, Point &leftEye, Point &
 int PreprocessImg::detectFace(Mat frame, Mat& out)
 {
     std::vector<Rect> faces;
-    this->equalize(this->imgOrig, this->imgEq, false);
+    this->equalize(frame, this->imgEq, false);
     Mat frame_gray = this->imgEq.clone();
 
     //-- Detect faces

@@ -47,6 +47,7 @@ public:
     Mat imgGrayFace;
     Mat imgRotatedFace;
     Mat imgPreprocessedFace;
+    Mat imgCropedFace;
 
     PreprocessImg(Mat &src);
     ~PreprocessImg();
